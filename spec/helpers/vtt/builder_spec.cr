@@ -4,6 +4,28 @@ MockLines                       = ["Line 1", "Line 2"]
 MockLinesWithEscapableCharacter = ["<Line 1>", "&Line 2>", '\u200E' + "Line\u200F 3", "\u00A0Line 4"]
 
 Spectator.describe "WebVTT::Builder" do
+  it "does not wrap the hours field past 24 hours" do
+    # Time::Span#hours is the hours component (0-23), so a 25h30m cue used to be
+    # written as 01:30:00.000 -- placing it before a cue at 02:00:00.000.
+    result = WebVTT.build do |vtt|
+      vtt.cue(
+        Time::Span.new(hours: 25, minutes: 30, seconds: 0),
+        Time::Span.new(hours: 25, minutes: 30, seconds: 1),
+        "Long stream"
+      )
+    end
+
+    expect(result).to contain("25:30:00.000 --> 25:30:01.000")
+  end
+
+  it "writes 24:00:00.000 at exactly 24 hours" do
+    result = WebVTT.build do |vtt|
+      vtt.cue(24.hours, 24.hours + 1.second, "Day two")
+    end
+
+    expect(result).to contain("24:00:00.000 --> 24:00:01.000")
+  end
+
   it "correctly builds a vtt file" do
     result = WebVTT.build do |vtt|
       2.times do |i|

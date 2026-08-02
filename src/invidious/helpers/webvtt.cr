@@ -33,7 +33,10 @@ module WebVTT
     end
 
     private def timestamp_component(timestamp : Time::Span)
-      @io << timestamp.hours.to_s.rjust(2, '0')
+      # 'hours' is the hours component (0-23), so a span of 25h would be
+      # written as '01'. WebVTT allows more than two digits in that field, and
+      # the cue time is an absolute offset, so use the total instead.
+      @io << timestamp.total_hours.to_i.to_s.rjust(2, '0')
       @io << ':' << timestamp.minutes.to_s.rjust(2, '0')
       @io << ':' << timestamp.seconds.to_s.rjust(2, '0')
       @io << '.' << timestamp.milliseconds.to_s.rjust(3, '0')
