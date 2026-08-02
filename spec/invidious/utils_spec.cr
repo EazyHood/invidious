@@ -1,6 +1,23 @@
 require "../spec_helper"
 
 Spectator.describe "Utils" do
+  describe "#decode_time" do
+    it "keeps the milliseconds it parses" do
+      expect(decode_time("500ms")).to eq(0.5)
+      expect(decode_time("1500ms")).to eq(1.5)
+      expect(decode_time("1m30s500ms")).to eq(90.5)
+    end
+
+    it "agrees with the plain-number path" do
+      expect(decode_time("1500ms")).to eq(decode_time("1.5"))
+    end
+
+    it "still parses hours, minutes and seconds" do
+      expect(decode_time("90s")).to eq(90.0)
+      expect(decode_time("1h2m3s")).to eq(3723.0)
+    end
+  end
+
   describe "decode_date" do
     it "parses short dates (en-US)" do
       expect(decode_date("1s ago")).to be_close(Time.utc - 1.second, 500.milliseconds)

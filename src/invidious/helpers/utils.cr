@@ -87,7 +87,11 @@ def decode_time(string)
     millis = /(?<millis>\d+)ms/.match(string).try &.["millis"].try &.to_f
     millis ||= 0
 
-    time = hours * 3600 + minutes * 60 + seconds + millis // 1000
+    # `millis` is a Float64 (it comes from .to_f), so `//` floors it and any value
+    # under a full second contributes 0. Introduced by 2febc26 while silencing
+    # Crystal 0.29 warnings, where // was equivalent for the integer operands but
+    # not for this one.
+    time = hours * 3600 + minutes * 60 + seconds + millis / 1000
   end
 
   return time
