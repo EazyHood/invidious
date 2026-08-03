@@ -325,6 +325,26 @@ def parse_range(range)
   return 0_i64, nil
 end
 
+# Turns the hashtags of an already HTML-escaped title into links to /hashtag/.
+#
+# Youtube makes hashtags in a title clickable, and Invidious already does it for
+# the ones in a description, so this covers the title too.
+#
+# The input is expected to be escaped already, and that is what shapes the
+# pattern. An escaped title can contain numeric character references such as
+# &#39;, and the '#39' inside one of those is not a hashtag, so a '#' preceded
+# by '&' is skipped. A '#' preceded by a word character is skipped too, which
+# keeps "C#" out -- Youtube does not treat that as a hashtag either. Anything
+# else may precede it, including an emoji.
+#
+# Nothing but the anchor is added, so the text stays as escaped as it came in.
+def add_hashtag_links(escaped_title : String) : String
+  escaped_title.gsub(/(?<![\w&])#([^\s#&<]+)/) do |match, group|
+    tag = group[1]
+    "<a href=\"#{URI.encode_path("/hashtag/#{tag}")}\">#{match}</a>"
+  end
+end
+
 def reduce_uri(uri : URI | String, max_length : Int32 = 50, suffix : String = "…") : String
   str = uri.to_s.sub(/^https?:\/\//, "")
   if str.size > max_length
