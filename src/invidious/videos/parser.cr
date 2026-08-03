@@ -55,6 +55,68 @@ module Invidious::Videos::Parser
     }
   end
 
+  # Parses a "lockupViewModel" from the secondary results into the same shape
+  # `parse_related_video` returns.
+  #
+  # Since 2026-05-21 Youtube sends the related videos of a watch page as
+  # lockupViewModel rather than compactVideoRenderer, so without this every
+  # related video comes from the endScreenVideoRenderer fallback instead.
+  def parse_related_lockup(lockup : JSON::Any) : Hash(String, JSON::Any)?
+    return nil if lockup["contentType"]?.try &.as_s != "LOCKUP_CONTENT_TYPE_VIDEO"
+
+    video_id = lockup["contentId"]?.try &.as_s
+    return nil if video_id.nil?
+
+    metadata = lockup.dig?("metadata", "lockupMetadataViewModel")
+    return nil if metadata.nil?
+
+    title = metadata.dig?("title", "content").try &.as_s
+
+    rows = metadata.dig?("metadata", "contentMetadataViewModel", "metadataRows").try &.as_a
+
+    # The first row holds the channel name, the second the view count and the
+    # publication date.
+    author_parts = rows.try &.[0]?.try &.dig?("metadataParts").try &.as_a
+    author = author_parts.try &.compact_map(&.dig?("text", "content").try &.as_s).join
+
+    # A verified channel gets a check attached to its name rather than a badge
+    # of its own.
+    author_verified = author_parts.try &.any? do |part|
+      part.dig?("text", "attachmentRuns").try &.as_a.any? do |run|
+        run.dig?("element", "type", "imageType", "image", "sources").try &.as_a.any? do |source|
+          source.dig?("clientResource", "imageName").try &.as_s == "CHECK_CIRCLE_FILLED"
+        end || false
+      end || false
+    end || false
+
+    ucid = metadata.dig?(
+      "image", "decoratedAvatarViewModel", "rendererContext", "commandContext",
+      "onTap", "innertubeCommand", "browseEndpoint", "browseId"
+    ).try &.as_s
+
+    info_parts = rows.try &.[1]?.try &.dig?("metadataParts").try &.as_a
+      .try &.compact_map(&.dig?("text", "content").try &.as_s) || [] of String
+
+    short_view_count = info_parts.find(&.includes?("views")).try &.sub(" views", "")
+    published = info_parts.find(&.includes?("ago")).try { |text| decode_date(text).to_rfc3339 }
+
+    length = lockup.dig?(
+      "contentImage", "thumbnailViewModel", "overlays", 0,
+      "thumbnailBottomOverlayViewModel", "badges", 0, "thumbnailBadgeViewModel", "text"
+    ).try &.as_s
+
+    return {
+      "id"               => JSON::Any.new(video_id),
+      "title"            => JSON::Any.new(title || ""),
+      "author"           => JSON::Any.new(author || ""),
+      "ucid"             => JSON::Any.new(ucid || ""),
+      "length_seconds"   => JSON::Any.new((length.try { |l| decode_length_seconds(l) } || 0).to_s),
+      "short_view_count" => JSON::Any.new(short_view_count || "0"),
+      "author_verified"  => JSON::Any.new(author_verified.to_s),
+      "published"        => JSON::Any.new(published || ""),
+    }
+  end
+
   def extract_video_info(video_id : String)
     # Fetch data from the player endpoint
     player_response = YoutubeAPI.player(video_id: video_id)
@@ -240,12 +302,17 @@ module Invidious::Videos::Parser
 
     related = [] of JSON::Any
 
-    # Parse "compactVideoRenderer" items (under secondary results)
+    # Parse "compactVideoRenderer" and "lockupViewModel" items (under secondary
+    # results). Youtube moved to the latter on 2026-05-21; the former is kept
+    # because it is still what other clients answer with.
     secondary_results = main_results
       .dig?("secondaryResults", "secondaryResults", "results")
     secondary_results.try &.as_a.each do |element|
       if item = element["compactVideoRenderer"]?
         related_video = self.parse_related_video(item)
+        related << JSON::Any.new(related_video) if related_video
+      elsif item = element["lockupViewModel"]?
+        related_video = self.parse_related_lockup(item)
         related << JSON::Any.new(related_video) if related_video
       end
     end
