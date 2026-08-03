@@ -1141,7 +1141,30 @@ module HelperExtractors
   # Retrieves the ID required for querying the InnerTube browse endpoint.
   # Returns an empty string when it's unable to do so
   def self.get_browse_id(container)
-    return container.dig?("navigationEndpoint", "browseEndpoint", "browseId").try &.as_s || ""
+    if browse_id = container.dig?("navigationEndpoint", "browseEndpoint", "browseId")
+      return browse_id.as_s
+    end
+
+    # A video credited to more than one channel is rendered as a single run
+    # ("Bloomberg Podcasts and Bloomberg Television") whose navigationEndpoint
+    # opens a channel picker rather than browsing anywhere, so it carries no
+    # browseEndpoint at all. The channels are listed inside that dialog; take
+    # the first, which is the one Youtube itself lists first.
+    dialog_items = container.dig?(
+      "navigationEndpoint", "showDialogCommand", "panelLoadingStrategy",
+      "inlineContent", "dialogViewModel", "customContent", "listViewModel",
+      "listItems"
+    )
+
+    dialog_items.try &.as_a?.try &.each do |item|
+      browse_id = item.dig?(
+        "listItemViewModel", "rendererContext", "commandContext",
+        "onTap", "innertubeCommand", "browseEndpoint", "browseId"
+      )
+      return browse_id.as_s if browse_id
+    end
+
+    return ""
   end
 end
 
