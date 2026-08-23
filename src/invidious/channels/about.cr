@@ -43,14 +43,16 @@ def extract_auto_generated_channel_header(initdata : Hash(String, JSON::Any), uc
   if header = initdata.dig?("header", "interactiveTabbedHeaderRenderer")
     author = header.dig("title", "simpleText").as_s
     author_url = initdata.dig("microformat", "microformatDataRenderer", "urlCanonical").as_s
-    author_thumbnail = header.dig("boxArt", "thumbnails", 0, "url").as_s
+    author_thumbnail = header.dig?("boxArt", "thumbnails", 0, "url").try &.as_s || ""
 
     banner = header.dig?("banner", "thumbnails").try &.[-1]?.try &.["url"].as_s?
 
-    description_base_node = header["description"]
+    description_base_node = header["description"]?
     # some channels have the description in a simpleText
     # ex: https://www.youtube.com/channel/UCQvWX73GQygcwXOTSf_VDVg/
-    description_node = description_base_node.dig?("simpleText") || description_base_node
+    description_node = description_base_node.try do |node|
+      node.dig?("simpleText") || node
+    end
 
     tags = header.dig?("badges")
       .try &.as_a.map(&.["metadataBadgeRenderer"]["label"].as_s) || [] of String
@@ -266,7 +268,9 @@ def get_about_info(ucid) : AboutChannel
     # ex: "74.3M subscribers". `subscriberCountText` is part of the same
     # renderer but comes back null, so it is only used as a first choice.
     sub_text = topic_details.dig?("subscriberCountText", "simpleText").try &.as_s
-    sub_text ||= topic_details.dig?("subtitle", "simpleText").try &.as_s
+    unless sub_text.try &.includes?("subscriber")
+      sub_text = topic_details.dig?("subtitle", "simpleText").try &.as_s
+    end
 
     if sub_text && sub_text.includes?("subscriber")
       sub_count = short_text_to_number(sub_text.split(" ")[0]).to_i32
