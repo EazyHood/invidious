@@ -200,6 +200,27 @@ Spectator.describe "extract_auto_generated_channel_header" do
     expect(header[:tags]).to eq(["Gaming"])
   end
 
+  it "falls back to the channel URL when the canonical URL is missing" do
+    initdata = JSON.parse(<<-JSON).as_h
+      {
+        "header": {
+          "interactiveTabbedHeaderRenderer": {
+            "title": {"simpleText": "Legacy gaming"}
+          }
+        },
+        "microformat": {
+          "microformatDataRenderer": {
+            "familySafe": true
+          }
+        }
+      }
+      JSON
+
+    header = extract_auto_generated_channel_header(initdata, "UCMissingCanonical")
+
+    expect(header[:author_url]).to eq("https://www.youtube.com/channel/UCMissingCanonical")
+  end
+
   it "keeps an explicit familySafe: false" do
     initdata = JSON.parse(<<-JSON).as_h
       {

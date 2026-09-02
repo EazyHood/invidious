@@ -964,8 +964,7 @@ private module Extractors
 
     private def self.extract(target)
       raw_items = [] of JSON::Any
-      content = extract_selected_tab(target["tabs"])["content"]?
-      return raw_items if content.nil?
+      content = extract_selected_tab(target["tabs"])["content"]
 
       if section_list_contents = content.dig?("sectionListRenderer", "contents")
         raw_items = unpack_section_list(section_list_contents)
