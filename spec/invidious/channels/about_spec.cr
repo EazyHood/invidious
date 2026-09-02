@@ -254,6 +254,23 @@ Spectator.describe "extract_auto_generated_channel_header" do
     expect(header[:is_family_friendly]).to be_false
   end
 
+  it "defaults an explicit familySafe: null to true" do
+    initdata = JSON.parse(<<-JSON).as_h
+      {
+        "header": {
+          "pageHeaderRenderer": {"pageTitle": "Gaming"}
+        },
+        "microformat": {
+          "microformatDataRenderer": {"familySafe": null}
+        }
+      }
+      JSON
+
+    header = extract_auto_generated_channel_header(initdata, "UCNullFamilySafe")
+
+    expect(header[:is_family_friendly]).to be_true
+  end
+
   it "raises when the header shape is unknown" do
     initdata = JSON.parse(<<-JSON).as_h
       {
@@ -298,6 +315,40 @@ Spectator.describe "extract_topic_channel_details" do
     expect(extract_topic_channel_details(initdata)).to be_nil
   end
 
+  it "returns nil when carousel contents are explicitly null" do
+    initdata = JSON.parse(<<-JSON).as_h
+      {
+        "header": {
+          "carouselHeaderRenderer": {
+            "contents": null
+          }
+        }
+      }
+      JSON
+
+    expect(extract_topic_channel_details(initdata)).to be_nil
+  end
+
+  it "skips an explicitly null topic renderer before a valid one" do
+    initdata = JSON.parse(<<-JSON).as_h
+      {
+        "header": {
+          "carouselHeaderRenderer": {
+            "contents": [
+              {"topicChannelDetailsRenderer": null},
+              {"topicChannelDetailsRenderer": {"title": {"simpleText": "Sports"}}}
+            ]
+          }
+        }
+      }
+      JSON
+
+    details = extract_topic_channel_details(initdata)
+
+    expect(details).not_to be_nil
+    expect(details.not_nil!.dig("title", "simpleText").as_s).to eq("Sports")
+  end
+
   it "exposes the subscriber count carried by the subtitle" do
     # `subscriberCountText` is part of the renderer but comes back null, so the
     # count is only available as free text in the subtitle.
@@ -322,11 +373,6 @@ Spectator.describe "extract_topic_channel_details" do
       }
       JSON
 
-    details = extract_topic_channel_details(initdata)
-
-    expect(details).not_to be_nil
-    sub_text = details.not_nil!.dig("subtitle", "simpleText").as_s
-    expect(sub_text).to eq("74.3M subscribers")
-    expect(short_text_to_number(sub_text.split(" ")[0])).to eq(74_300_000_i64)
+    expect(extract_topic_channel_subscriber_count(initdata)).to eq(74_300_000)
   end
 end

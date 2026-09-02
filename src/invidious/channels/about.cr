@@ -24,12 +24,29 @@ record AboutChannel,
 # rather than by index.
 # ex: https://www.youtube.com/channel/UCEgdi0XIXXZ-qJOFPf4JSKw
 def extract_topic_channel_details(initdata : Hash(String, JSON::Any)) : JSON::Any?
-  contents = initdata.dig?("header", "carouselHeaderRenderer", "contents")
-  return nil if contents.nil?
+  contents = initdata.dig?("header", "carouselHeaderRenderer", "contents").try &.as_a?
+  return nil unless contents
 
-  contents.as_a
-    .find { |content| !content.dig?("topicChannelDetailsRenderer").nil? }
-    .try &.dig?("topicChannelDetailsRenderer")
+  contents.each do |content|
+    details = content.dig?("topicChannelDetailsRenderer")
+    return details if details.try &.as_h?
+  end
+
+  nil
+end
+
+def extract_topic_channel_subscriber_count(initdata : Hash(String, JSON::Any)) : Int32
+  details = extract_topic_channel_details(initdata)
+  return 0 unless details
+
+  sub_text = details.dig?("subscriberCountText", "simpleText").try &.as_s?
+  unless sub_text.try &.includes?("subscriber")
+    sub_text = details.dig?("subtitle", "simpleText").try &.as_s?
+  end
+
+  return 0 unless sub_text.try &.includes?("subscriber")
+
+  short_text_to_number(sub_text.split(" ")[0]).to_i32
 end
 
 # Auto-generated channels come with one of three header shapes. This is only
@@ -96,7 +113,7 @@ def extract_auto_generated_channel_header(initdata : Hash(String, JSON::Any), uc
 
   # `microformat` is absent from these payloads, so a missing flag defaults to
   # safe. An explicit `false` is still preserved.
-  family_safe = initdata.dig?("microformat", "microformatDataRenderer", "familySafe").try(&.as_bool)
+  family_safe = initdata.dig?("microformat", "microformatDataRenderer", "familySafe").try &.as_bool?
 
   {
     author:             author,
@@ -265,18 +282,8 @@ def get_about_info(ucid) : AboutChannel
 
       break if sub_count != 0 && !pronouns.nil?
     end
-  elsif (topic_details = extract_topic_channel_details(initdata))
-    # Topic channels carry the subscriber count as free text in the subtitle,
-    # ex: "74.3M subscribers". `subscriberCountText` is part of the same
-    # renderer but comes back null, so it is only used as a first choice.
-    sub_text = topic_details.dig?("subscriberCountText", "simpleText").try &.as_s
-    unless sub_text.try &.includes?("subscriber")
-      sub_text = topic_details.dig?("subtitle", "simpleText").try &.as_s
-    end
-
-    if sub_text && sub_text.includes?("subscriber")
-      sub_count = short_text_to_number(sub_text.split(" ")[0]).to_i32
-    end
+  elsif initdata.dig?("header", "carouselHeaderRenderer")
+    sub_count = extract_topic_channel_subscriber_count(initdata)
   end
 
   AboutChannel.new(
