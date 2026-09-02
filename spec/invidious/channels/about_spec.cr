@@ -200,6 +200,22 @@ Spectator.describe "extract_auto_generated_channel_header" do
     expect(header[:tags]).to eq(["Gaming"])
   end
 
+  it "raises an InfoException when the legacy interactive title is missing" do
+    initdata = JSON.parse(<<-JSON).as_h
+      {
+        "header": {
+          "interactiveTabbedHeaderRenderer": {
+            "title": {}
+          }
+        }
+      }
+      JSON
+
+    expect do
+      extract_auto_generated_channel_header(initdata, "UCMissingTitle")
+    end.to raise_error(InfoException, /interactive title/)
+  end
+
   it "falls back to the channel URL when the canonical URL is missing" do
     initdata = JSON.parse(<<-JSON).as_h
       {
